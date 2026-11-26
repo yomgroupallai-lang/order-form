@@ -23,18 +23,14 @@ button:disabled{opacity:.5}
 </head>
 <body>
 <main>
-<section id="login">
-  <h1>Customer Order Form</h1>
-  <p>Please sign in with Google to continue.</p>
-  <div id="gbtn"></div>
-</section>
-<section id="formBox" hidden>
+<section id="formBox">
   <h1>Customer Order Form</h1>
   <form id="form">
     <label for="name">Customer Name *</label><input id="name" required maxlength="60" dir="auto">
-    <label for="email">E-mail Id (Google verified)</label><input id="email" type="email" readonly>
+    <label for="email">E-mail Id (Google verified)</label><input id="email" type="email" readonly placeholder="Verify with the Google button below">
     <label for="area">Location (area) *</label><input id="area" required maxlength="200" dir="auto">
     <label for="contact">Contact *</label><input id="contact" required type="tel" inputmode="tel" maxlength="16" placeholder="+971501234567">
+    <div id="gbtn" style="margin-top:20px"></div>
     <button id="send">Submit</button>
   </form>
 </section>
@@ -64,8 +60,7 @@ function onSignIn(r) {
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
   $('email').value = JSON.parse(new TextDecoder().decode(bytes)).email;
   $('msg').textContent = '';
-  $('login').hidden = true;
-  $('formBox').hidden = false;
+  $('gbtn').hidden = true;
 }
 function check(name, area, contact) {
   if (!/^\P{Nd}{2,60}$/u.test(name) || !/\p{L}/u.test(name)) return 'Please enter your full name (no numbers).';
@@ -77,8 +72,8 @@ $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const name = $('name').value.trim(), area = $('area').value.trim(), contact = $('contact').value.trim();
   const problem = check(name, area, contact);
-  $('msg').textContent = problem;
-  if (problem) return;
+  $('msg').textContent = problem || (idToken ? '' : 'Please verify your email: tap the Google button above Submit.');
+  if (problem || !idToken) return;
   $('send').disabled = true;
   $('send').textContent = 'Submitting...';
   try {
@@ -93,6 +88,7 @@ $('form').addEventListener('submit', async e => {
     $('done').hidden = false;
   } catch (err) {
     $('msg').textContent = err instanceof TypeError || err instanceof SyntaxError ? 'Network problem. Please try again.' : err.message;
+    if (/sign.?in/i.test(err.message)) { idToken = ''; $('email').value = ''; $('gbtn').hidden = false; }
     $('send').disabled = false;
     $('send').textContent = 'Submit';
   }
