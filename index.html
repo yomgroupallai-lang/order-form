@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Customer Order Form</title>
-<script src="https://accounts.google.com/gsi/client" async onload="startSignIn()"></script>
 <style>
 body{margin:0;background:#f0ebf8;font-family:system-ui,sans-serif;color:#202124}
 main{max-width:440px;margin:0 auto;padding:16px}
@@ -27,10 +26,9 @@ button:disabled{opacity:.5}
   <h1>Customer Order Form</h1>
   <form id="form">
     <label for="name">Customer Name *</label><input id="name" required maxlength="60" dir="auto">
-    <label for="email">E-mail Id (Google verified)</label><input id="email" type="email" readonly placeholder="Verify with the Google button below">
+    <label for="email">E-mail Id *</label><input id="email" type="email" required maxlength="120" autocomplete="email" autocapitalize="none" placeholder="name@gmail.com">
     <label for="area">Location (area) *</label><input id="area" required maxlength="200" dir="auto">
     <label for="contact">Contact *</label><input id="contact" required type="tel" inputmode="tel" maxlength="16" placeholder="+971501234567">
-    <div id="gbtn" style="margin-top:20px"></div>
     <button id="send">Submit</button>
   </form>
 </section>
@@ -44,23 +42,21 @@ button:disabled{opacity:.5}
 <div id="msg" role="alert"></div>
 </main>
 <script>
-const CLIENT_ID = '997985047997-2q3uo4p67br205t4kglst6jrat5htm0p.apps.googleusercontent.com';
 const API = 'https://script.google.com/macros/s/AKfycbyvVvYkTxKXNUO4zVPcK_GYreghGcPcRH05_YR_-iEeh9blj2sfhBVdU1SXSPbDQe8l/exec';
 const $ = id => document.getElementById(id);
-let idToken = '';
 const requestId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
 
-function startSignIn() {
-  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onSignIn });
-  google.accounts.id.renderButton($('gbtn'), { theme: 'filled_blue', size: 'large', width: 280 });
-}
-function onSignIn(r) {
-  idToken = r.credential;
-  const b64 = idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  $('email').value = JSON.parse(new TextDecoder().decode(bytes)).email;
-  $('msg').textContent = '';
-  $('gbtn').hidden = true;
+function emailProblem(email) {
+  const bad = 'Please enter a correct E-mail Id.';
+  const m = /^([A-Za-z0-9_+-]+(?:\.[A-Za-z0-9_+-]+)*)@((?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,})$/.exec(email);
+  if (!m || m[1].length > 64 || email.length > 120) return bad;
+  const domain = m[2].toLowerCase();
+  if (/^(gmial|gmai|gmal|gamil|gnail|gmaill)\.com$|^gmail\.(co|con|cm|om|comm|in)$|^(yahooo|yaho)\.com$|^(hotmial|hotmal)\.com$|\.(con|comm|cmo)$/.test(domain)) return 'Please check the spelling of your E-mail Id.';
+  if (domain === 'gmail.com') {
+    const user = m[1].split('+')[0];
+    if (!/^[A-Za-z0-9.]+$/.test(user) || user.replace(/\./g, '').length < 6 || user.replace(/\./g, '').length > 30) return bad;
+  }
+  return '';
 }
 function check(name, area, contact) {
   if (!/^\P{Nd}{2,60}$/u.test(name) || !/\p{L}/u.test(name)) return 'Please enter your full name (no numbers).';
@@ -71,25 +67,24 @@ function check(name, area, contact) {
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const name = $('name').value.trim(), area = $('area').value.trim(), contact = $('contact').value.trim();
-  const problem = check(name, area, contact);
-  $('msg').textContent = problem || (idToken ? '' : 'Please verify your email: tap the Google button above Submit.');
-  if (problem || !idToken) return;
+  const email = $('email').value.trim();
+  const problem = check(name, area, contact) || emailProblem(email);
+  $('msg').textContent = problem;
+  if (problem) return;
   $('send').disabled = true;
   $('send').textContent = 'Submitting...';
   try {
     // text/plain avoids a CORS preflight, which Apps Script does not answer
     const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ idToken, requestId, name, area, contact }) });
+      body: JSON.stringify({ requestId, name, email, area, contact }) });
     const out = await res.json();
     if (!out.ok) throw new Error(out.error);
-    if (out.already) $('doneTitle').textContent = 'This e-mail has already submitted an order';
     $('orderId').textContent = out.orderId;
     $('who').textContent = out.name + ' | ' + out.date;
     $('formBox').hidden = true;
     $('done').hidden = false;
   } catch (err) {
     $('msg').textContent = err instanceof TypeError || err instanceof SyntaxError ? 'Network problem. Please try again.' : err.message;
-    if (/sign.?in/i.test(err.message)) { idToken = ''; $('email').value = ''; $('gbtn').hidden = false; }
     $('send').disabled = false;
     $('send').textContent = 'Submit';
   }
