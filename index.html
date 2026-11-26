@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Order Form</title>
+<script src="https://accounts.google.com/gsi/client" async onload="startSignIn()"></script>
+<style>
+body{margin:0;background:#f0ebf8;font-family:system-ui,sans-serif;color:#202124}
+main{max-width:440px;margin:0 auto;padding:16px}
+section{background:#fff;border-radius:10px;border-top:8px solid #673ab7;padding:20px}
+h1{font-size:22px;margin:0 0 16px}
+label{display:block;margin:14px 0 4px;font-weight:600}
+input{box-sizing:border-box;width:100%;padding:12px;font-size:16px;border:1px solid #bbb;border-radius:6px}
+input[readonly]{background:#eee}
+button{width:100%;margin-top:20px;padding:14px;font-size:17px;border:0;border-radius:6px;background:#673ab7;color:#fff}
+button:disabled{opacity:.5}
+#msg{color:#b00020;margin-top:12px}
+#orderId{font-size:44px;font-weight:700;color:#673ab7;margin:12px 0}
+.center{text-align:center}
+[hidden]{display:none}
+</style>
+</head>
+<body>
+<main>
+<section id="login">
+  <h1>Customer Order Form</h1>
+  <p>Please sign in with Google to continue.</p>
+  <div id="gbtn"></div>
+</section>
+<section id="formBox" hidden>
+  <h1>Customer Order Form</h1>
+  <form id="form">
+    <label for="name">Customer Name *</label><input id="name" required maxlength="60" dir="auto">
+    <label for="email">E-mail Id (Google verified)</label><input id="email" type="email" readonly>
+    <label for="area">Location (area) *</label><input id="area" required maxlength="200" dir="auto">
+    <label for="contact">Contact *</label><input id="contact" required type="tel" inputmode="tel" maxlength="16" placeholder="+971501234567">
+    <button id="send">Submit</button>
+  </form>
+</section>
+<section id="done" class="center" hidden>
+  <h1>Order received</h1>
+  <p>Your Order ID</p>
+  <div id="orderId"></div>
+  <p id="who"></p>
+  <p>Please take a screenshot of this screen and show it to us.</p>
+</section>
+<div id="msg" role="alert"></div>
+</main>
+<script>
+const CLIENT_ID = '997985047997-2q3uo4p67br205t4kglst6jrat5htm0p.apps.googleusercontent.com';
+const API = 'https://script.google.com/macros/s/AKfycbyvVvYkTxKXNUO4zVPcK_GYreghGcPcRH05_YR_-iEeh9blj2sfhBVdU1SXSPbDQe8l/exec';
+const $ = id => document.getElementById(id);
+let idToken = '';
+const requestId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+
+function startSignIn() {
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: onSignIn });
+  google.accounts.id.renderButton($('gbtn'), { theme: 'filled_blue', size: 'large', width: 280 });
+}
+function onSignIn(r) {
+  idToken = r.credential;
+  const b64 = idToken.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  $('email').value = JSON.parse(new TextDecoder().decode(bytes)).email;
+  $('msg').textContent = '';
+  $('login').hidden = true;
+  $('formBox').hidden = false;
+}
+function check(name, area, contact) {
+  if (!/^\P{Nd}{2,60}$/u.test(name) || !/\p{L}/u.test(name)) return 'Please enter your full name (no numbers).';
+  if (area.length < 2 || !/\p{L}/u.test(area)) return 'Please enter your area name.';
+  if (!/^\+?[0-9]{7,15}$/.test(contact)) return 'Contact: numbers only (7 to 15 digits).';
+  return '';
+}
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('name').value.trim(), area = $('area').value.trim(), contact = $('contact').value.trim();
+  const problem = check(name, area, contact);
+  $('msg').textContent = problem;
+  if (problem) return;
+  $('send').disabled = true;
+  $('send').textContent = 'Submitting...';
+  try {
+    // text/plain avoids a CORS preflight, which Apps Script does not answer
+    const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ idToken, requestId, name, area, contact }) });
+    const out = await res.json();
+    if (!out.ok) throw new Error(out.error);
+    $('orderId').textContent = out.orderId;
+    $('who').textContent = out.name + ' | ' + out.date;
+    $('formBox').hidden = true;
+    $('done').hidden = false;
+  } catch (err) {
+    $('msg').textContent = err instanceof TypeError || err instanceof SyntaxError ? 'Network problem. Please try again.' : err.message;
+    $('send').disabled = false;
+    $('send').textContent = 'Submit';
+  }
+});
+</script>
+</body>
+</html>
